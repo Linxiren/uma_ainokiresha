@@ -75,7 +75,6 @@ BUTTONS = {
 # 配置参数
 TARGET_EXE = config["TARGET_EXE"]
 FIXED_DST_PORT = 4693
-HEARTBEAT_MAX_LEN = 60
 
 # 全局变量
 target_ports = set()
@@ -250,6 +249,53 @@ def parse_umaai_data_summer2(parameters):
     print(f"当前回合: {current_round}, 建议操作: {best_action} (分数: {scores[best_action]})")
     return best_action
 
+def parse_server_data(data):
+    """解析服务器发送的数据"""
+    try:
+        json_data = json.loads(data)
+        
+        # 提取所需信息
+        result = {
+            'vital': json_data.get('vital', 0),
+            'maxVital': json_data.get('maxVital', 0),
+            'isQieZhe': json_data.get('isQieZhe', False),
+            'skillPt': json_data.get('skillPt', 0),
+            'larc_supportPtAll': json_data.get('larc_supportPtAll', 0),
+            'larc_zuoyueOutgoingRefused': json_data.get('larc_zuoyueOutgoingRefused', False),
+        }
+        
+        # 计算五维总和
+        five_status = json_data.get('fiveStatus', [])
+        result['fiveStatusSum'] = sum(five_status) if five_status else 0
+        
+        # 获取非-1的cardIdInGame对应的friendship
+        persons = json_data.get('persons', [])
+        valid_friendships = [p.get('friendship', 0) for p in persons 
+                           if p.get('cardIdInGame', -1) != -1]
+        
+        # 获取最低的友情值
+        min_friendship = min(valid_friendships) if valid_friendships else 0
+        result['minFriendship'] = min_friendship
+        
+        print(f"""
+状态信息:
+体力: {result['vital']}/{result['maxVital']}
+是否切者: {result['isQieZhe']}
+技能点: {result['skillPt']}
+支援点数: {result['larc_supportPtAll']}
+左月外出拒绝: {result['larc_zuoyueOutgoingRefused']}
+五维总和: {result['fiveStatusSum']}
+最低友情度: {result['minFriendship']}
+        """)
+        
+        return result
+        
+    except json.JSONDecodeError:
+        print("JSON解析失败")
+        return None
+    except Exception as e:
+        print(f"解析服务器数据异常: {str(e)}")
+        return None
 
 def get_target_ports_once():
     """启动时一次性获取目标端口"""
@@ -282,26 +328,67 @@ def websocket_decrypt(raw_data):
     except Exception as e:
         print(f"解密异常: {str(e)}")
         return None
+    
+def websocket_decode(raw_data):
+    """解码WebSocket数据帧"""
+    try:
+        if len(raw_data) < 2:
+            return None
+            
+        # 获取第二个字节（包含payload长度信息）
+        second_byte = raw_data[1]
+        payload_length = second_byte & 127
+        mask_offset = 2
+        
+        # 处理扩展长度
+        if payload_length == 126:
+            payload_length = int.from_bytes(raw_data[2:4], 'big')
+            mask_offset = 4
+        elif payload_length == 127:
+            payload_length = int.from_bytes(raw_data[2:10], 'big')
+            mask_offset = 10
+            
+        # 检查是否有掩码
+        is_masked = (second_byte & 0x80) != 0
+        
+        if is_masked:
+            # 获取掩码密钥
+            mask_key = raw_data[mask_offset:mask_offset + 4]
+            payload_offset = mask_offset + 4
+            
+            # 解码payload
+            payload = bytes(b ^ mask_key[i % 4] for i, b in enumerate(raw_data[payload_offset:]))
+        else:
+            # 未掩码的payload
+            payload = raw_data[mask_offset:]
+            
+        return payload.decode('utf-8')
+    except Exception as e:
+        print(f"WebSocket解码异常: {str(e)}")
+        return None
 
 async def process_packet_queue():
     """异步处理数据包队列"""
     while processing:
         try:
-            packet_data = await packet_buffer.get()
-            if "PrintUmaAiResult" in packet_data:
-                data = json.loads(packet_data)
-                params = data["Parameters"][0].split()
-                params = [float(p) if not p.startswith('-') and p.replace('.', '', 1).isdigit() else 0.0 
-                         for p in params]
-                
-                if current_round >= 58 and len(params) >= 30:
-                    parse_umaai_data_summer2(params)
-
-                elif current_round >= 35 and current_round <= 41 and len(params) >= 25:
-                    parse_umaai_data_summer1(params)
-
-                elif len(params) >= 14:
-                    parse_umaai_data(params)
+            source, packet_data = await packet_buffer.get()
+            
+            if source == "client":
+                if "PrintUmaAiResult" in packet_data:
+                    # 处理客户端数据
+                    data = json.loads(packet_data)
+                    params = data["Parameters"][0].split()
+                    params = [float(p) if not p.startswith('-') and p.replace('.', '', 1).isdigit() else 0.0 
+                             for p in params]
+                    
+                    if current_round >= 58 and len(params) >= 30:
+                        parse_umaai_data_summer2(params)
+                    elif current_round >= 35 and current_round <= 41 and len(params) >= 25:
+                        parse_umaai_data_summer1(params)
+                    elif len(params) >= 14:
+                        parse_umaai_data(params)
+            elif source == "server":
+                parse_server_data(packet_data)
             
             packet_buffer.task_done()
         except Exception as e:
@@ -344,24 +431,31 @@ def packet_callback(packet):
         if not packet.haslayer(TCP):
             return
             
-        # 快速过滤
-        if packet[TCP].dport != FIXED_DST_PORT or packet[TCP].sport not in target_ports:
-            return
-            
-        # 检查是否有负载
-        if not packet.haslayer(Raw):
-            return
-            
-        payload = bytes(packet[Raw])
-        if len(payload) < HEARTBEAT_MAX_LEN:
-            return
-            
-        if result := websocket_decrypt(payload):
-            if loop and not loop.is_closed():
-                future = asyncio.run_coroutine_threadsafe(packet_buffer.put(result), loop)
-                future.result()  # 等待结果，确保数据被放入队列
-            else:
-                print("事件循环未运行或已关闭")
+        # 检查是否为客户端到服务器的通信
+        if packet[TCP].dport == FIXED_DST_PORT and packet[TCP].sport in target_ports:
+            if not packet.haslayer(Raw):
+                return
+                
+            payload = bytes(packet[Raw])
+            if len(payload) < 60:
+                return
+                
+            if result := websocket_decrypt(payload):
+                if loop and not loop.is_closed():
+                    future = asyncio.run_coroutine_threadsafe(packet_buffer.put(("client", result)), loop)
+                    future.result()
+        
+        # 检查是否为服务器到客户端的通信
+        elif packet[TCP].sport == FIXED_DST_PORT and packet[TCP].dport in target_ports:
+            if not packet.haslayer(Raw):
+                return
+                
+            payload = bytes(packet[Raw])
+            if len(payload) >= 1000:
+                if decoded_data := websocket_decode(payload):
+                    if loop and not loop.is_closed():
+                        future = asyncio.run_coroutine_threadsafe(packet_buffer.put(("server", decoded_data)), loop)
+                        future.result()
             
     except Exception as e:
         print(f"回调异常: {str(e)}")
@@ -370,10 +464,15 @@ def start_capture():
     """抓包函数"""
     print("启动高速流量监控...")
     
-    # 设置BPF过滤器，在抓包层面就过滤
-    filter_str = f"tcp and dst port {FIXED_DST_PORT} and ("
+    # 设置BPF过滤器，包含双向流量
+    filter_str = f"tcp and ("
+    filter_str += f"(dst port {FIXED_DST_PORT} and ("
     filter_str += " or ".join(f"src port {port}" for port in target_ports)
-    filter_str += ")"
+    filter_str += f")) or (src port {FIXED_DST_PORT} and ("
+    filter_str += " or ".join(f"dst port {port}" for port in target_ports)
+    filter_str += ")))"
+    
+    print(f"使用过滤器: {filter_str}")  # 打印过滤器以便调试
     
     # 使用AsyncSniffer进行异步抓包
     sniffer = AsyncSniffer(
