@@ -16,16 +16,102 @@ def ensure_config_exists():
     
     if not os.path.exists(config_path):
         default_config = {
-        "ADB_PATH": "E:\\leidian\\LDPlayer9\\adb.exe",
-        "DEVICE_ID": "emulator-5554",
-        "TARGET_EXE": "E:\\\u51ef\u65cb\u95e8\u9ed1\u677f\\UmaAi\u795e\u7ecf\u7f51\u7edc\u7248\uff08Nvidia\u663e\u5361\u4e13\u5c5e\uff09.exe",
-        "schedule_action": "\u547c\u51fa\u8d5b\u7a0b\u4e00",
-        "five_choice_one_action": "\u76ee\u6807\u9009\u62e9\u4e8c",
-        "normal_scores": {"\u901f\u8bad\u7ec3": 0, "\u8010\u8bad\u7ec3": 0, "\u529b\u8bad\u7ec3": 0, "\u6839\u8bad\u7ec3": -20, "\u667a\u8bad\u7ec3": -50, "SS\u8bad\u7ec3": 0, "\u4f11\u606f": 0, "\u53cb\u4eba\u51fa\u884c": 0, "\u5355\u72ec\u51fa\u884c": 0, "\u6bd4\u8d5b": 0},
-        "ss_scores": {"\u901f\u8bad\u7ec3": 0, "\u8010\u8bad\u7ec3": 0, "\u529b\u8bad\u7ec3": 0, "\u6839\u8bad\u7ec3": -20, "\u667a\u8bad\u7ec3": 240, "SS\u8bad\u7ec3": 320, "\u4f11\u606f": 160, "\u53cb\u4eba\u51fa\u884c": 400, "\u5355\u72ec\u51fa\u884c": 0, "\u6bd4\u8d5b": 0},
-        "summer1_scores": {"\u901f\u8bad\u7ec3": 0, "\u8010\u8bad\u7ec3": 0, "\u529b\u8bad\u7ec3": 0, "\u6839\u8bad\u7ec3": -35, "\u667a\u8bad\u7ec3": -90, "SS\u8bad\u7ec3": 0, "\u4f11\u606f": 0, "\u53cb\u4eba\u51fa\u884c": 0, "\u5355\u72ec\u51fa\u884c": 0, "\u6bd4\u8d5b": 0, "\u8fdc\u5f81\u901f": 0, "\u8fdc\u5f81\u8010": 0, "\u8fdc\u5f81\u529b": 0, "\u8fdc\u5f81\u6839": -35, "\u8fdc\u5f81\u667a": -60},
-        "summer2_scores": {"\u901f\u8bad\u7ec3": 0, "\u8010\u8bad\u7ec3": 0, "\u529b\u8bad\u7ec3": 0, "\u6839\u8bad\u7ec3": -35, "\u667a\u8bad\u7ec3": -80, "SS\u8bad\u7ec3": 0, "\u4f11\u606f": -50, "\u53cb\u4eba\u51fa\u884c": 0, "\u5355\u72ec\u51fa\u884c": 0, "\u6bd4\u8d5b": 0, "\u8fdc\u5f81\u901f": 0, "\u8fdc\u5f81\u8010": 0, "\u8fdc\u5f81\u529b": 0, "\u8fdc\u5f81\u6839": -45, "\u8fdc\u5f81\u667a": -100, "\u4f53\u901f": 0, "\u4f53\u8010": 0, "\u4f53\u529b": 0, "\u4f53\u6839": 0, "\u4f53\u667a": 0, "\u8fdc\u5f81\u4f53\u901f": 0, "\u8fdc\u5f81\u4f53\u8010": 0, "\u8fdc\u5f81\u4f53\u529b": 0, "\u8fdc\u5f81\u4f53\u6839": -20, "\u8fdc\u5f81\u4f53\u667a": -180},
-        "run_styles": {"\u9003": [43], "\u5148": [39, 63], "\u5dee": [], "\u8ffd": []}
+            "ADB_PATH": "E:\\leidian\\LDPlayer9\\adb.exe",
+            "DEVICE_ID": "emulator-5554",
+            "TARGET_EXE": "E:\\凯旋门黑板\\UmaAi神经网络版（Nvidia显卡专属）.exe",
+            "five_choice_one_action": "目标选择三",
+            "use_alarm": "是",
+            "min_vital_for_yellow_hat": 50.0,
+            "skill_point_ratio": 50.0,
+            "luck_thresholds": {
+                "early": "-200",
+                "mid": "10",
+                "late": "300"
+            },
+            "filters": {
+                "出道": {
+                    "minFriendship": 35.0,
+                    "minStatusSum": 1600.0,
+                    "minlarc_supportPtAll": 13000.0
+                },
+                "第一次交流战前": {
+                    "minFriendship": 71.0,
+                    "minStatusSum": 2400.0,
+                    "minlarc_supportPtAll": 30000.0
+                },
+                "继承": {
+                    "minFriendship": 87.0,
+                    "minStatusSum": 3700.0,
+                    "minlarc_supportPtAll": 45000.0
+                },
+                "第二次交流战前": {
+                    "minFriendship": 95.0,
+                    "minStatusSum": 4500.0,
+                    "minlarc_supportPtAll": 60000.0
+                }
+            },
+            "normal_scores": {
+                "速训练": 0.0,
+                "耐训练": 0.0,
+                "力训练": 0.0,
+                "根训练": -20.0,
+                "智训练": -50.0,
+                "SS训练": 0.0,
+                "休息": 0.0,
+                "友人出行": 0.0,
+                "单独出行": -60.0,
+                "比赛": 0.0
+            },
+            "summer1_scores": {
+                "速训练": 0.0,
+                "耐训练": 0.0,
+                "力训练": 0.0,
+                "根训练": -35.0,
+                "智训练": -90.0,
+                "SS训练": 0.0,
+                "休息": 0.0,
+                "友人出行": 0.0,
+                "单独出行": 0.0,
+                "比赛": 0.0,
+                "远征速": 0.0,
+                "远征耐": 0.0,
+                "远征力": 0.0,
+                "远征根": -35.0,
+                "远征智": -60.0
+            },
+            "summer2_scores": {
+                "速训练": 0.0,
+                "耐训练": 0.0,
+                "力训练": 0.0,
+                "根训练": -35.0,
+                "智训练": -80.0,
+                "SS训练": 0.0,
+                "休息": -50.0,
+                "友人出行": 0.0,
+                "单独出行": 0.0,
+                "比赛": 0.0,
+                "远征速": 0.0,
+                "远征耐": 0.0,
+                "远征力": 0.0,
+                "远征根": -45.0,
+                "远征智": -100.0,
+                "体速": 0.0,
+                "体耐": 0.0,
+                "体力": 0.0,
+                "体根": 0.0,
+                "体智": 0.0,
+                "远征体速": 0.0,
+                "远征体耐": 0.0,
+                "远征体力": 0.0,
+                "远征体根": -20.0,
+                "远征体智": -180.0
+            },
+            "run_styles": {
+                "逃": [43],
+                "先": [39, 63],
+                "差": [],
+                "追": []
+            }
         }
         import json
         try:
