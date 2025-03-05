@@ -22,7 +22,7 @@ DEVICE_ID = config["DEVICE_ID"]
 
 # 按钮坐标配置（720x1280分辨率）
 BUTTONS = {
-    '训练': (365, 945),
+    '训练': (365, 945), #17正式开始育成
     '速': (60, 1040),
     '耐': (180, 1040),
     '力': (300, 1040),
@@ -40,10 +40,10 @@ BUTTONS = {
     '国外资质': (450, 1175),
     '友人':(350, 395),
     '担当':(350, 645),
-    '确认参赛':(530, 885),
+    '确认参赛':(530, 890), #11确认萝卜氪体
     '远征_确认参赛':(530, 1180),
     '观看结果':(240, 1205),
-    '继续':(470, 1205),
+    '继续':(470, 1205), #13确认开始培育
     '确认':(360, 1100),
     '远征_根':(250, 100),
     '远征_耐':(470, 100),
@@ -55,26 +55,32 @@ BUTTONS = {
     '远征_友情':(590, 380),
     '远征_金克斯':(250, 510),
     '远征_连霸':(470, 510),
-    '远征_升级':(510, 720),
+    '远征_升级':(510, 720), #5选择借支援卡(6找到支援卡点击)
     '返回':(60, 1250),
     '选择一':(50, 830),
     '选择二':(50, 720),
     '选择三':(50, 610),
     '选择四':(50, 500),
     '选择五':(50, 390),
-    '目标竞赛':(530, 840),
-    '打开选单':(650, 1230),
+    '目标竞赛':(530, 840), #8确认回体
+    '打开选单':(650, 1230), #14跳过剧本初动画
     '放弃':(550, 550),
-    '确认放弃':(550, 860),
+    '确认放弃':(550, 860), #15确认跳过动画
     '逃':(600, 750),
     '先':(440, 750),
     '差':(280, 750),
     '追':(140, 750),
+    '事件快进':(250, 1250), #16点两次
+    '选择萝卜':(610, 180), #9
+    '萝卜氪体':(530, 640), #10
+    '确认育成':(450, 1075), #1育成，2选择剧本，3选择马娘，4选择种马，7开始育成，11.5确认体力已充，12开始培育
+    '刷新好友卡':(650, 1000) #6.5
 }
 
 # 配置参数
 TARGET_EXE = config["TARGET_EXE"]
 FIXED_DST_PORT = 4693
+support_card = config["support_card"]
 
 # 全局变量
 target_ports = set()
@@ -86,18 +92,30 @@ best_action = None
 lock = threading.Lock()
 screenshot = None
 loop = None
+isQieZhe = False
+vitalshortage = 0
+larc_zuoyueOutgoingRefused = False
+larc_supportPtAll = 0
+StatusSum = 400
+minFriendship = 0
+luck_value = 0
+baseline = 30000
+is_killed = True
 
 def adb_click(x, y, delay=0.8):
-    cmd = f'"{ADB_PATH}" -s {DEVICE_ID} shell input tap {x} {y}'
+    rand_x = x + random.randint(-1, 1)
+    rand_y = y + random.randint(-1, 1)
+    rand_delay = delay + random.uniform(-0.1, 0.1)
+    cmd = f'"{ADB_PATH}" -s {DEVICE_ID} shell input tap {rand_x} {rand_y}'
     try:
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
-            print(f"点击成功: ({x}, {y})")
+            print(f"点击成功: ({rand_x}, {rand_y})，延迟: {rand_delay:.2f}s")
         else:
             print(f"点击失败: {result.stderr}")
     except Exception as e:
         print(f"命令执行异常: {str(e)}")
-    sleep(delay)
+    sleep(rand_delay)
 
 def perform_action(action_name):
     """执行完整的操作流程"""
@@ -119,9 +137,6 @@ def perform_action(action_name):
         "出行事件选择": lambda: [adb_click(*BUTTONS['选择三']), sleep(0.5)],
         "目标选择一": lambda: [adb_click(*BUTTONS['选择五']), sleep(0.5)],
         "目标选择二": lambda: [adb_click(*BUTTONS['选择四']), sleep(0.5)],
-        "目标选择三": lambda: [adb_click(*BUTTONS['选择三']), sleep(0.5)],
-        "目标选择四": lambda: [adb_click(*BUTTONS['选择二']), sleep(0.5)],
-        "目标选择五": lambda: [adb_click(*BUTTONS['选择一']), sleep(0.5)],
         "继承": lambda: [adb_click(*BUTTONS['确认']), sleep(0.5)],
         "用闹钟": lambda: [adb_click(*BUTTONS['观看结果']), adb_click(*BUTTONS['继续']), sleep(0.5)],
         "赛前点适性": lambda: [adb_click(*BUTTONS['国外资质']), adb_click(*BUTTONS['远征_根']), adb_click(*BUTTONS['远征_升级']), adb_click(*BUTTONS['远征_耐']), adb_click(*BUTTONS['远征_升级']), adb_click(*BUTTONS['确认']), adb_click(*BUTTONS['远征_确认参赛']), sleep(4), adb_click(*BUTTONS['返回']), adb_click(*BUTTONS['返回']), sleep(0.5)],
@@ -159,6 +174,17 @@ def perform_action(action_name):
         "跑法改先": lambda: [adb_click(*BUTTONS['逃']), adb_click(*BUTTONS['先']), adb_click(*BUTTONS['确认参赛']), sleep(0.5)],
         "跑法改差": lambda: [adb_click(*BUTTONS['逃']), adb_click(*BUTTONS['差']), adb_click(*BUTTONS['确认参赛']), sleep(0.5)],
         "跑法改追": lambda: [adb_click(*BUTTONS['逃']), adb_click(*BUTTONS['追']), adb_click(*BUTTONS['确认参赛']), sleep(0.5)],
+        "放弃育成": lambda: [adb_click(*BUTTONS['打开选单']), adb_click(*BUTTONS['放弃']), adb_click(*BUTTONS['确认放弃'])],
+        "确认育成": lambda: [adb_click(*BUTTONS['确认育成'])],
+        "借卡": lambda: [adb_click(*BUTTONS['远征_升级'])],
+        "刷新好友卡": lambda: [adb_click(*BUTTONS['刷新好友卡']), sleep(0.5)],
+        "确认回体": lambda: [adb_click(*BUTTONS['目标竞赛']), sleep(0.5)],
+        "选择萝卜": lambda: [adb_click(*BUTTONS['选择萝卜'])],
+        "萝卜氪体": lambda: [adb_click(*BUTTONS['萝卜氪体']), sleep(0.5), adb_click(*BUTTONS['确认参赛'])],
+        "确认培育": lambda: [adb_click(*BUTTONS['继续'])],
+        "跳过剧本初动画": lambda: [adb_click(*BUTTONS['打开选单'])],
+        "事件快进": lambda: [adb_click(*BUTTONS['事件快进']), adb_click(*BUTTONS['事件快进']), adb_click(*BUTTONS['训练'])],
+        "借卡选择": lambda: [adb_click(*BUTTONS['远征_速'])],
     }
     
     if action := actions.get(action_name):
@@ -167,7 +193,7 @@ def perform_action(action_name):
         print(f"未知的操作: {action_name}")
 
 def parse_umaai_data(parameters):
-    global current_round, best_action
+    global current_round, best_action, luck_value, baseline
     scores = {
         "回合数": float(parameters[1]),
         "速训练": float(parameters[6]) + config["normal_scores"]["速训练"],
@@ -181,6 +207,21 @@ def parse_umaai_data(parameters):
         "单独出行": float(parameters[14]) + config["normal_scores"]["单独出行"],
         "比赛": float(parameters[15]) + config["normal_scores"]["比赛"]
     }
+
+    #if float(parameters[1]) == 0:
+        #if float(parameters[2]) >= 31000:
+            #baseline = 31000
+        #elif float(parameters[2]) >= 30000:
+            #baseline = float(parameters[2])
+        #else:
+            #baseline = 30000
+    #else:
+        #luck_value = baseline - float(parameters[3])
+
+    if float(parameters[1]) == 0:
+        baseline = float(parameters[2])
+    else:
+        luck_value = baseline - float(parameters[3])
 
     current_round = int(scores["回合数"])
     best_action = max(scores, key=scores.get)
@@ -251,22 +292,29 @@ def parse_umaai_data_summer2(parameters):
 
 def parse_server_data(data):
     """解析服务器发送的数据"""
+    global isQieZhe, vitalshortage, larc_zuoyueOutgoingRefused, larc_supportPtAll, StatusSum, minFriendship
     try:
         json_data = json.loads(data)
         
-        # 提取所需信息
-        result = {
-            'vital': json_data.get('vital', 0),
-            'maxVital': json_data.get('maxVital', 0),
-            'isQieZhe': json_data.get('isQieZhe', False),
-            'skillPt': json_data.get('skillPt', 0),
-            'larc_supportPtAll': json_data.get('larc_supportPtAll', 0),
-            'larc_zuoyueOutgoingRefused': json_data.get('larc_zuoyueOutgoingRefused', False),
-        }
+        # 获取体力缺额
+        vital = json_data.get('vital', 0)
+        maxVital = json_data.get('maxVital', 0)
+        vitalshortage = maxVital - vital
+
+        # 是否切者
+        isQieZhe = json_data.get('isQieZhe', False)
         
-        # 计算五维总和
+        # 总支持度
+        larc_supportPtAll = json_data.get('larc_supportPtAll', 0)
+
+        # 是否出行
+        larc_zuoyueOutgoingRefused = json_data.get('larc_zuoyueOutgoingRefused', False)
+        
+        # 计算技能点和五维总和
+        skillPt = json_data.get('skillPt', 0)
         five_status = json_data.get('fiveStatus', [])
-        result['fiveStatusSum'] = sum(five_status) if five_status else 0
+        fiveStatusSum = sum(five_status) if five_status else 0
+        StatusSum = fiveStatusSum + skillPt*config["skill_point_ratio"]/100
         
         # 获取非-1的cardIdInGame对应的friendship
         persons = json_data.get('persons', [])
@@ -274,21 +322,18 @@ def parse_server_data(data):
                            if p.get('cardIdInGame', -1) != -1]
         
         # 获取最低的友情值
-        min_friendship = min(valid_friendships) if valid_friendships else 0
-        result['minFriendship'] = min_friendship
+        minFriendship = min(valid_friendships) if valid_friendships else 0
         
         print(f"""
-状态信息:
-体力: {result['vital']}/{result['maxVital']}
-是否切者: {result['isQieZhe']}
-技能点: {result['skillPt']}
-支援点数: {result['larc_supportPtAll']}
-左月外出拒绝: {result['larc_zuoyueOutgoingRefused']}
-五维总和: {result['fiveStatusSum']}
-最低友情度: {result['minFriendship']}
+            状态信息:
+            体力: {vital}/{maxVital}
+            总支持度: {larc_supportPtAll}
+            五维总和: {fiveStatusSum}
+            技能点: {skillPt}
+            最低友情度: {minFriendship}
         """)
         
-        return result
+        return isQieZhe
         
     except json.JSONDecodeError:
         print("JSON解析失败")
@@ -515,7 +560,7 @@ def capture_screenshot():
 
 def check_game_state():
     """检查游戏状态"""
-    global best_action, screenshot
+    global best_action, screenshot, is_killed
     while True:
         with lock:
             screenshot = capture_screenshot()
@@ -549,7 +594,20 @@ def check_game_state():
             'add_training_img': cv2.imread(os.path.join(current_dir, 'picture/20.png')),
             'lace_confirm_img': cv2.imread(os.path.join(current_dir, 'picture/21.png')),
             'lace_kaigai_confirm_img': cv2.imread(os.path.join(current_dir, 'picture/22.png')),
-            'continue_action_img': cv2.imread(os.path.join(current_dir, 'picture/23.png'))
+            'continue_action_img': cv2.imread(os.path.join(current_dir, 'picture/23.png')),
+            'main_interface_img': cv2.imread(os.path.join(current_dir, 'picture/24.png')),
+            'friend_supportcard_into_img': cv2.imread(os.path.join(current_dir, 'picture/25.png')),
+            'friend_supportcard_interface_img': cv2.imread(os.path.join(current_dir, 'picture/26.png')),
+            'vital_add_into_img': cv2.imread(os.path.join(current_dir, 'picture/27.png')),
+            'vital_add_interface_img': cv2.imread(os.path.join(current_dir, 'picture/28.png')),
+            'begin_into_img': cv2.imread(os.path.join(current_dir, 'picture/29.png')),
+            'goto_begin_img': cv2.imread(os.path.join(current_dir, 'picture/30.png')),
+            'follow_friend_img': cv2.imread(os.path.join(current_dir, 'picture/31.png')),
+            'follow_friend1_img': cv2.imread(os.path.join(current_dir, 'picture/32.png')),
+            '101_img': cv2.imread(os.path.join(current_dir, 'picture/101.png')),
+            '102_img': cv2.imread(os.path.join(current_dir, 'picture/102.png')),
+            '103_img': cv2.imread(os.path.join(current_dir, 'picture/103.png')),
+            '104_img': cv2.imread(os.path.join(current_dir, 'picture/104.png'))
         }
 
         # 定义所有ROI
@@ -575,11 +633,87 @@ def check_game_state():
             'add_training_roi': screenshot[235:285, 110:552],
             'lace_confirm_roi': screenshot[1038:1138, 1:511],
             'lace_kaigai_confirm_roi': screenshot[1130:1230, 0:720],
-            'continue_action_roi': screenshot[1180:1280, 0:720]
+            'continue_action_roi': screenshot[1180:1280, 0:720],
+            'main_interface_roi': screenshot[1223:1266, 455:692],
+            'friend_supportcard_into_roi': screenshot[535:795, 494:649],
+            'friend_supportcard_interface_roi': screenshot[35:90, 9:709],
+            'vital_add_into_roi': screenshot[739:889, 10:710],
+            'vital_add_interface1_roi': screenshot[35:90, 8:708],
+            'vital_add_interface2_roi': screenshot[299:354, 8:708],
+            'vital_add_interface3_roi': screenshot[383:438, 8:708],
+            'begin_into_roi': screenshot[1120:1280, 0:720],
+            'goto_begin_roi': screenshot[870:1280, 0:640],
+            'follow_friend_roi': screenshot[210:385, 479:684],
+            'follow_friend1_roi': screenshot[212:387, 479:684],
+            'friend_supportcard_roi': screenshot[229:364, 37:139]
         }
         
         if screenshot is not None:
-            if current_round == 22 and match_template(rois['training_roi'], images['training_img']) and best_action is not None:
+            if isQieZhe == True:
+                print("检测到天赋异禀，鼠标给你你来玩")
+                input("\n按任意键继续...")
+            elif is_killed == True:
+                if match_template(rois['main_interface_roi'], images['main_interface_img']):
+                    if match_template(rois['friend_supportcard_into_roi'], images['friend_supportcard_into_img']):
+                        perform_action("借卡")
+                    else:
+                        perform_action("确认育成")
+                elif match_template(rois['friend_supportcard_interface_roi'], images['friend_supportcard_interface_img']):
+                    swipe_count = 0
+                    page_count = 0
+                    max_pages = 20
+                    while page_count < max_pages:
+                        if match_template1(rois['friend_supportcard_roi'], images[support_card]):
+                            print("找到目标支援卡")
+                            perform_action("借卡选择")
+                            return True
+                        elif (match_template1(rois['follow_friend_roi'], images['follow_friend_img'])) or (match_template1(rois['follow_friend1_roi'], images['follow_friend1_img'])):
+                            swipe_count = (swipe_count + 1) % 3
+                            x = 174 if swipe_count == 1 else 175
+                            swipe_distance = 600 - x
+                            subprocess.run(f'"{ADB_PATH}" -s {DEVICE_ID} shell input swipe 360 600 360 {swipe_distance} 300', shell=True, capture_output=True, text=True, timeout=5)
+                            print(f"执行滑动操作，swipe_count: {swipe_count}, 滑动距离: {x}")
+                            sleep(2)
+                            screenshot = capture_screenshot()
+                            rois['follow_friend_roi'] = screenshot[210:385, 479:684]
+                            rois['follow_friend1_roi'] = screenshot[212:387, 479:684]
+                            rois['friend_supportcard_roi'] = screenshot[229:364, 37:139]
+                        else:
+                            print(f"本页未找到，刷新{page_count}次")
+                            perform_action("刷新好友卡")
+                            page_count += 1
+                            sleep(3)
+                            screenshot = capture_screenshot()
+                            rois['follow_friend_roi'] = screenshot[210:385, 479:684]
+                            rois['follow_friend1_roi'] = screenshot[212:387, 479:684]
+                            rois['friend_supportcard_roi'] = screenshot[229:364, 37:139]
+                    print(f"已检查 {max_pages} 次，未找到目标支援卡，请追随一个携带所需支援卡的玩家")
+                    return False
+                elif match_template(rois['vital_add_into_roi'], images['vital_add_into_img']):
+                    perform_action("确认回体")
+                elif match_template(rois['vital_add_interface1_roi'], images['vital_add_interface_img']):
+                    perform_action("选择萝卜")
+                elif match_template(rois['vital_add_interface2_roi'], images['vital_add_interface_img']):
+                    perform_action("萝卜氪体")
+                elif match_template(rois['vital_add_interface3_roi'], images['vital_add_interface_img']):
+                    perform_action("确认育成")
+                elif match_template(rois['begin_into_roi'], images['begin_into_img']):
+                    perform_action("确认培育")
+                elif match_template(rois['goto_begin_roi'], images['goto_begin_img']):
+                    sleep(1)
+                    perform_action("事件快进")
+                    is_killed == False
+                else:
+                    sleep(3)
+                    screenshot = capture_screenshot()
+                    rois['main_interface_roi'] = screenshot[1223:1266, 455:692]
+                    if not match_template(rois['main_interface_roi'], images['main_interface_img']):
+                        perform_action("跳过剧本初动画")
+            elif larc_zuoyueOutgoingRefused == True:
+                print("检测到赌黄帽失败")
+                perform_action("放弃育成")
+                is_killed = True
+            elif current_round == 22 and match_template(rois['training_roi'], images['training_img']) and best_action is not None:
                 perform_action("赛前点适性")
                 screenshot = capture_screenshot()
                 rois['continue_action_roi'] = screenshot[1180:1280, 0:720]
@@ -614,16 +748,21 @@ def check_game_state():
                     if config["five_choice_one_action"] == "目标选择二":
                         perform_action("目标选择二")
                     elif config["five_choice_one_action"] == "目标选择三":
-                        perform_action("目标选择三")
+                        perform_action("出行事件选择")
                     elif config["five_choice_one_action"] == "目标选择四":
-                        perform_action("目标选择四")
+                        perform_action("随机事件选择")
                     elif config["five_choice_one_action"] == "目标选择五":
-                        perform_action("目标选择五")
+                        perform_action("特殊事件选择")
                     else:
-                        perform_action("呼出赛程一")
+                        perform_action("目标选择一")
                 elif match_template(rois['trip_roi'], images['trip_img']):
                     print("检测到出行事件")
-                    perform_action("出行事件选择")
+                    if vitalshortage >= config["min_vital_for_yellow_hat"]:
+                        print("赌黄帽")
+                        perform_action("随机事件选择")
+                    else:
+                        print("不赌黄帽")
+                        perform_action("出行事件选择")
                 elif match_template(rois['greenhat_ask_roi'], images['greenhat_ask_img']) or match_template(rois['add_training_roi'], images['add_training_img']):
                     print("检测到特殊事件")
                     perform_action("特殊事件选择")
@@ -631,9 +770,19 @@ def check_game_state():
                     print("检测到事件选择")
                     perform_action("随机事件选择")
             elif match_template(rois['training_roi'], images['training_img']) and best_action is not None:
-                if current_round == 30:
+                if (current_round in (1, 2, 3, 4) and luck_value <= config["luck_thresholds"]["early"]) or (current_round in (5, 6, 7, 8, 9, 10) and luck_value <= config["luck_thresholds"]["mid"]) or (current_round >= 11 and current_round <= 23 and luck_value <= config["luck_thresholds"]["late"]):
+                    print("检测到本局运气低于标准")
+                    perform_action("放弃育成")
+                    is_killed = True
+                elif current_round == 30:
                     print("开启第三过滤器")
+                    if minFriendship < config["filters"]["继承"]["minFriendship"] or StatusSum < config["filters"]["继承"]["minStatusSum"] or larc_supportPtAll < config["filters"]["继承"]["minlarc_supportPtAll"]:
+                        print("不通过，放弃育成")
+                        perform_action("放弃育成")
+                        is_killed = True
                     print("通过，继续育成")
+                    if config["filters"]["继承"]["pause_after_pass"] == True:
+                        input("\n按任意键继续...")
                 sleep(1)
                 screenshot = capture_screenshot()
                 rois['training_roi'] = screenshot[938:1044, 70:170]
@@ -660,16 +809,34 @@ def check_game_state():
                 print("检测到交流战")
                 if current_round == 23:
                     print("开启第二过滤器")
+                    if minFriendship < config["filters"]["第一次交流战前"]["minFriendship"] or StatusSum < config["filters"]["第一次交流战前"]["minStatusSum"] or larc_supportPtAll < config["filters"]["第一次交流战前"]["minlarc_supportPtAll"]:
+                        print("不通过，放弃育成")
+                        perform_action("放弃育成")
+                        is_killed = True
                     print("通过，继续育成")
+                    if config["filters"]["第一次交流战前"]["pause_after_pass"] == True:
+                        input("\n按任意键继续...")
                 if current_round == 35:
                     print("开启第四过滤器")
+                    if minFriendship < config["filters"]["第二次交流战前"]["minFriendship"] or StatusSum < config["filters"]["第二次交流战前"]["minStatusSum"] or larc_supportPtAll < config["filters"]["第二次交流战前"]["minlarc_supportPtAll"]:
+                        print("不通过，放弃育成")
+                        perform_action("放弃育成")
+                        is_killed = True
                     print("通过，继续育成")
+                    if config["filters"]["第二次交流战前"]["pause_after_pass"] == True:
+                        input("\n按任意键继续...")
                 perform_action("海外赛")
             elif match_template(rois['object_lace_roi'], images['object_lace_img']):
                 if current_round == 10:
                     print("检测到出道战")
                     print("开启第一过滤器")
+                    if minFriendship < config["filters"]["出道"]["minFriendship"] or StatusSum < config["filters"]["出道"]["minStatusSum"] or larc_supportPtAll < config["filters"]["出道"]["minlarc_supportPtAll"]:
+                        print("不通过，放弃育成")
+                        perform_action("放弃育成")
+                        is_killed = True
                     print("通过，继续育成")
+                    if config["filters"]["出道"]["pause_after_pass"] == True:
+                        input("\n按任意键继续...")
                     perform_action("新人赛")
                 elif current_round in (32, 58):
                     print("检测到目标赛")
@@ -698,7 +865,7 @@ def check_game_state():
             elif match_template(rois['continue_roi'], images['continue_img']):
                 print("检测到目标达成")
                 perform_action("目标达成")
-            elif match_template(rois['lace_lose_roi'], images['lace_lose_img']):
+            elif match_template(rois['lace_lose_roi'], images['lace_lose_img']) and config["use_alarm"] == "是":
                 print("检测到比赛失败，闹钟启动")
                 perform_action("用闹钟")
             elif match_template(rois['lace_confirm_roi'], images['lace_confirm_img']):
@@ -713,9 +880,6 @@ def check_game_state():
             elif match_template(rois['lace_over1_roi'], images['lace_over1_img']):
                 print("检测到比赛结束")
                 perform_action("比赛结束")
-            elif current_round == 65 and match_template(rois['clock_roi'], images['clock_img']):
-                print("检测到凯旋门失败")
-                perform_action("凯旋门失败")
             
         sleep(1)
 
@@ -723,6 +887,13 @@ def match_template(roi, template):
     """模板匹配"""
     res = cv2.matchTemplate(roi, template, cv2.TM_CCOEFF_NORMED)
     threshold = 0.99
+    loc = np.where(res >= threshold)
+    return len(loc[0]) > 0
+
+def match_template1(roi, template):
+    """模板匹配"""
+    res = cv2.matchTemplate(roi, template, cv2.TM_CCOEFF_NORMED)
+    threshold = 0.96
     loc = np.where(res >= threshold)
     return len(loc[0]) > 0
 
