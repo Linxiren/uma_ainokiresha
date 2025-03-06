@@ -659,34 +659,25 @@ def check_game_state():
                     else:
                         perform_action("确认育成")
                 elif match_template(rois['friend_supportcard_interface_roi'], images['friend_supportcard_interface_img']):
-                    swipe_count = 0
                     page_count = 0
                     max_pages = 20
                     while page_count < max_pages:
-                        if match_template1(rois['friend_supportcard_roi'], images[support_card]):
-                            print("找到目标支援卡")
-                            perform_action("借卡选择")
+                        result = find_and_click_support_card()
+                        if result == "找到卡":
+                            sleep(1)
                             return True
-                        elif (match_template1(rois['follow_friend_roi'], images['follow_friend_img'])) or (match_template1(rois['follow_friend1_roi'], images['follow_friend1_img'])):
-                            swipe_count = (swipe_count + 1) % 3
-                            x = 174 if swipe_count == 1 else 175
-                            swipe_distance = 600 - x
-                            subprocess.run(f'"{ADB_PATH}" -s {DEVICE_ID} shell input swipe 360 600 360 {swipe_distance} 300', shell=True, capture_output=True, text=True, timeout=5)
-                            print(f"执行滑动操作，swipe_count: {swipe_count}, 滑动距离: {x}")
-                            sleep(2)
-                            screenshot = capture_screenshot()
-                            rois['follow_friend_roi'] = screenshot[210:385, 479:684]
-                            rois['follow_friend1_roi'] = screenshot[212:387, 479:684]
-                            rois['friend_supportcard_roi'] = screenshot[229:364, 37:139]
-                        else:
+                        elif result == "需要滑动":
+                            sleep(2.5)
+                            continue
+                        elif result == "需要刷新":
                             print(f"本页未找到，刷新{page_count}次")
                             perform_action("刷新好友卡")
                             page_count += 1
-                            sleep(3)
-                            screenshot = capture_screenshot()
-                            rois['follow_friend_roi'] = screenshot[210:385, 479:684]
-                            rois['follow_friend1_roi'] = screenshot[212:387, 479:684]
-                            rois['friend_supportcard_roi'] = screenshot[229:364, 37:139]
+                            sleep(4)
+                            continue
+                        elif result == "截图失败":
+                            sleep(1)
+                            continue
                     print(f"已检查 {max_pages} 次，未找到目标支援卡，请追随一个携带所需支援卡的玩家")
                     return False
                 elif match_template(rois['vital_add_into_roi'], images['vital_add_into_img']):
@@ -890,12 +881,76 @@ def match_template(roi, template):
     loc = np.where(res >= threshold)
     return len(loc[0]) > 0
 
-def match_template1(roi, template):
-    """模板匹配"""
-    res = cv2.matchTemplate(roi, template, cv2.TM_CCOEFF_NORMED)
+def find_and_click_support_card():
+    """在整个列表区域查找支援卡并点击第一个匹配项，
+    如果未找到则检查follow_friend区域并执行相应操作"""
+    images = {
+        'follow_friend_img': cv2.imread(os.path.join(current_dir, 'picture/31.png')),
+        'follow_friend1_img': cv2.imread(os.path.join(current_dir, 'picture/32.png')),
+        '101_img': cv2.imread(os.path.join(current_dir, 'picture/101.png')),
+        '102_img': cv2.imread(os.path.join(current_dir, 'picture/102.png')),
+        '103_img': cv2.imread(os.path.join(current_dir, 'picture/103.png')),
+        '104_img': cv2.imread(os.path.join(current_dir, 'picture/104.png'))
+    }
+    screenshot = capture_screenshot()
+    if screenshot is None:
+        print("截图失败")
+        return "截图失败"
+    
+    # 1. 首先尝试查找支援卡
+    # 扩展检测区域到整个可能包含支援卡的区域
+    extended_roi = screenshot[100:1000, 37:139]
+    
+    template = images[support_card]
+    result = cv2.matchTemplate(extended_roi, template, cv2.TM_CCOEFF_NORMED)
+    
     threshold = 0.96
-    loc = np.where(res >= threshold)
-    return len(loc[0]) > 0
+    locations = np.where(result >= threshold)
+    match_points = list(zip(*locations[::-1]))
+    
+    if match_points:
+        # 找到支援卡，按y坐标排序，获取最上面的一个
+        match_points.sort(key=lambda p: p[1])
+        x, y = match_points[0]
+        
+        # 计算模板中心点在原始图像中的坐标
+        h, w = template.shape[:2]
+        center_x = x + w // 2 + 37  # 加上ROI的x偏移
+        center_y = y + h // 2 + 100  # 加上ROI的y偏移
+        
+        print(f"找到目标支援卡，位置: ({center_x}, {center_y})")
+        
+        # 点击找到的支援卡
+        adb_click(center_x, center_y)
+        return "找到卡"
+    
+    # 2. 如果没找到支援卡，检查是否可以滑动
+    extended2_roi = screenshot[100:1000, 479:684]
+    
+    template1 = images['follow_friend_img']
+    result1 = cv2.matchTemplate(extended2_roi, template1, cv2.TM_CCOEFF_NORMED)
+    locations1 = np.where(result1 >= threshold)
+    match_points1 = list(zip(*locations1[::-1]))
+    
+    if match_points1:
+        subprocess.run(f'"{ADB_PATH}" -s {DEVICE_ID} shell input swipe 360 800 360 300 900', 
+                      shell=True, capture_output=True, text=True, timeout=5)
+        print("执行滑动操作")
+        return "需要滑动"
+    
+    template2 = images['follow_friend1_img']
+    result2 = cv2.matchTemplate(extended2_roi, template2, cv2.TM_CCOEFF_NORMED)
+    locations2 = np.where(result2 >= threshold)
+    match_points2 = list(zip(*locations2[::-1]))
+    
+    if match_points2:
+        subprocess.run(f'"{ADB_PATH}" -s {DEVICE_ID} shell input swipe 360 800 360 300 900', 
+                      shell=True, capture_output=True, text=True, timeout=5)
+        print("执行滑动操作")
+        return "需要滑动"
+    
+    # 3. 如果既没找到支援卡也没找到可滑动区域，则刷新页面
+    return "需要刷新"
 
 def safe_perform_action(action):
     """带锁的执行操作"""
